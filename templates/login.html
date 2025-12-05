@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Connexion CardioCare</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="bg-light d-flex justify-content-center align-items-center" style="height:100vh;">
+    <div class="card p-4 shadow" style="width:400px;">
+        <h3 class="text-center mb-4 text-primary">CardioCare</h3>
+        <form id="loginForm">
+            <div class="mb-3">
+                <label>Email</label>
+                <input type="email" id="email" class="form-control" required>
+            </div>
+            <div class="mb-3">
+                <label>Mot de passe</label>
+                <input type="password" id="password" class="form-control" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">Se connecter</button>
+            <div id="error" class="text-danger mt-3 text-center"></div>
+        </form>
+    </div>
+    <script>
+        document.getElementById('loginForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const em = document.getElementById('email').value;
+            const pw = document.getElementById('password').value;
+            const res = await fetch('/login_api', {
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body:JSON.stringify({email:em, password:pw})
+            });
+            if(res.ok) window.location.href = '/dashboard';
+            else document.getElementById('error').innerText = 'Erreur de connexion';
+        };
+    </script>
+</body>
+</html>
