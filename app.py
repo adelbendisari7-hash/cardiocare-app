@@ -215,7 +215,9 @@ def list_patients():
     res = []
     for p in Patient.query.all():
         u = User.query.get(p.user_id) if p.user_id else None
-        has_record = Symptom.query.filter_by(patient_id=p.id).first() is not None
+        has_sym = Symptom.query.filter_by(patient_id=p.id).first() is not None
+        has_exam = RadioImage.query.filter_by(patient_id=p.id).first() is not None
+        has_record = has_sym and has_exam
         res.append({
             'id': p.id,
             'nom': p.nom,
@@ -305,6 +307,38 @@ def add_exam():
     db.session.commit()
     return jsonify({'message': 'OK'})
 
+# NOUVELLE ROUTE : récupérer le dernier dossier pour pré-remplir / consulter
+@app.route('/api/patient_record/<int:pid>')
+def get_patient_record(pid):
+    p = Patient.query.get(pid)
+    if not p:
+        return jsonify({'error': 'Patient introuvable'}), 404
+
+    s = Symptom.query.filter_by(patient_id=pid).order_by(Symptom.id.desc()).first()
+    r = RadioImage.query.filter_by(patient_id=pid).order_by(RadioImage.id.desc()).first()
+
+    return jsonify({
+        'patient': {
+            'id': p.id,
+            'nom': p.nom,
+            'prenom': p.prenom,
+            'age': p.age,
+            'sexe': p.sexe,
+            'diabete': bool(p.diabete)
+        },
+        'symptoms': None if not s else {
+            'chest_pain': s.chest_pain,
+            'breath_problems': s.breath_problems,
+            'cold_sweat': bool(s.cold_sweat)
+        },
+        'exams': None if not r else {
+            'ecg': r.ecg,
+            'mri': r.mri,
+            'pulse_rate': r.pulse_rate,
+            'tcho': r.tcho
+        }
+    })
+
 # =========================
 # DIAGNOSTIC VIA WEB SERVICES (RÈGLES ou IA)
 # =========================
@@ -320,7 +354,6 @@ def diagnose(pid):
         if not p or not s or not r:
             return jsonify({'error': 'Données manquantes'}), 400
 
-        # Préparation du JSON pour les web services
         payload = {
             "patient": {
                 "age": p.age,
@@ -341,7 +374,6 @@ def diagnose(pid):
             }
         }
 
-        # Appel au service adéquat (Render)
         if method == 'rules':
             resp = requests.post(RULES_SERVICE_URL, json=payload, timeout=8)
         else:
@@ -353,7 +385,6 @@ def diagnose(pid):
 
         result = resp.json()
 
-        # Construction du texte "details" pour l'historique
         if 'explanation' in result:
             details_text = ", ".join(result.get('explanation', []))
         else:

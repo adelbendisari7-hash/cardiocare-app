@@ -11,19 +11,14 @@
         .sidebar { height: 100vh; background: white; padding: 20px; box-shadow: 2px 0 10px rgba(0,0,0,0.05); position: fixed; width: 250px; }
         .main-content { margin-left: 250px; padding: 30px; }
         .hidden { display: none !important; }
-
-        /* Patient Dashboard */
         .patient-header { background: linear-gradient(135deg, #0d6efd, #0099ff); color: white; padding: 30px; border-radius: 15px; margin-bottom: 30px; }
         .diag-card { border: none; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.08); transition: transform 0.3s; }
         .diag-card:hover { transform: translateY(-5px); }
-
-        /* Doctor IA */
         .ai-panel { background: #f8f9fa; border-left: 4px solid #0d6efd; padding: 20px; border-radius: 5px; }
         .factor-tag { background: #e9ecef; padding: 5px 10px; border-radius: 15px; font-size: 0.85em; margin-right: 5px; display: inline-block; margin-bottom: 5px; }
     </style>
 </head>
 <body>
-    <!-- SIDEBAR -->
     <div class="sidebar d-flex flex-column">
         <h4 class="text-primary mb-4"><i class="fas fa-heartbeat"></i> CardioCare</h4>
         <div id="user-info" class="mb-4 text-muted small">Chargement...</div>
@@ -56,7 +51,6 @@
         </div>
     </div>
 
-    <!-- MAIN CONTENT -->
     <div class="main-content">
         <!-- ADMIN -->
         <div id="vue-admin-users" class="hidden">
@@ -146,7 +140,15 @@
             <button onclick="showSection('doc-patients')" class="btn btn-link text-decoration-none ps-0 mb-3">← Retour liste</button>
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2 id="record-title">Dossier Patient</h2>
-                <input type="hidden" id="currentPatientId">
+                <div>
+                    <input type="hidden" id="currentPatientId">
+                    <button id="btn-edit-record"
+                            class="btn btn-outline-secondary"
+                            style="display:none;"
+                            onclick="toggleEditMode(true)">
+                        Modifier le dossier
+                    </button>
+                </div>
             </div>
 
             <div class="row mb-4">
@@ -209,7 +211,6 @@
                 </div>
             </div>
 
-            <!-- IA DIAGNOSTIC -->
             <div class="card border-0 shadow-lg">
                 <div class="card-header bg-primary text-white py-3">
                     <h4 class="mb-0"><i class="fas fa-brain me-2"></i> Assistant Diagnostic (Règles / IA)</h4>
@@ -389,8 +390,16 @@
                     <small class="text-muted">${p.age} ans</small>
                   </td>
                   <td>${p.email}</td>
-                  <td>${p.has_record?'<span class="text-success"><i class="fas fa-check-circle"></i> Complet</span>':'<span class="text-warning">Incomplet</span>'}</td>
-                  <td><button class="btn btn-primary btn-sm" onclick="openRec(${p.id})">Voir Dossier</button></td>
+                  <td>${p.has_record
+                        ? '<span class="text-success"><i class="fas fa-check-circle"></i> Complet</span>'
+                        : '<span class="text-warning">Incomplet</span>'}
+                  </td>
+                  <td>
+                    <button class="btn btn-primary btn-sm"
+                            onclick="openRec(${p.id}, ${p.has_record ? 'true' : 'false'})">
+                      Voir Dossier
+                    </button>
+                  </td>
                 </tr>`).join('');
         }
 
@@ -440,11 +449,75 @@
             }
         }
 
-        function openRec(id) {
+        // ACTIVE / DESACTIVE les champs du dossier
+        function toggleEditMode(edit) {
+            const disabled = !edit;
+            ['sym-pain','sym-breath','sym-sweat','exam-ecg','exam-mri','exam-tcho','exam-pulse']
+              .forEach(id => {
+                  const el = document.getElementById(id);
+                  if (!el) return;
+                  el.disabled = disabled;
+              });
+
+            if (edit) {
+                document.getElementById('btn-edit-record').style.display = 'none';
+            }
+        }
+
+        async function openRec(id, hasRecord) {
             document.getElementById('currentPatientId').value = id;
+
+            if (!hasRecord) {
+                // Pas de dossier encore : formulaire vierge
+                showSection('doc-record');
+                document.getElementById('record-title').innerText = "Nouveau dossier patient";
+
+                ['sym-pain','sym-breath','exam-ecg','exam-mri','exam-tcho','exam-pulse'].forEach(x => {
+                    const el = document.getElementById(x);
+                    if (el) el.disabled = false;
+                });
+                document.getElementById('sym-pain').value = '0';
+                document.getElementById('sym-breath').value = '0';
+                document.getElementById('exam-ecg').value = '0';
+                document.getElementById('exam-mri').value = '0';
+                document.getElementById('exam-tcho').value = '';
+                document.getElementById('exam-pulse').value = '';
+                document.getElementById('sym-sweat').checked = false;
+
+                document.getElementById('btn-edit-record').style.display = 'none';
+                document.getElementById('diag-result').style.display = 'none';
+                document.getElementById('diag-placeholder').style.display = 'block';
+                return;
+            }
+
+            // Dossier existant : consultation d'abord
+            const r = await fetch(`/api/patient_record/${id}`);
+            const d = await r.json();
+            if (d.error) {
+                alert(d.error);
+                return;
+            }
+
             showSection('doc-record');
+            document.getElementById('record-title').innerText =
+                `Dossier de ${d.patient.prenom} ${d.patient.nom}`;
+
+            if (d.symptoms) {
+                document.getElementById('sym-pain').value = d.symptoms.chest_pain;
+                document.getElementById('sym-breath').value = d.symptoms.breath_problems;
+                document.getElementById('sym-sweat').checked = d.symptoms.cold_sweat;
+            }
+            if (d.exams) {
+                document.getElementById('exam-ecg').value = d.exams.ecg;
+                document.getElementById('exam-mri').value = d.exams.mri;
+                document.getElementById('exam-tcho').value = d.exams.tcho;
+                document.getElementById('exam-pulse').value = d.exams.pulse_rate;
+            }
+
+            toggleEditMode(false);
+            document.getElementById('btn-edit-record').style.display = 'inline-block';
             document.getElementById('diag-result').style.display = 'none';
-            document.getElementById('diag-placeholder').style.display = 'block';
+            document.getElementById('diag-placeholder').display = 'block';
         }
 
         async function saveSymptoms() {
@@ -477,7 +550,6 @@
             if (res.ok) alert('Examens sauvegardés'); else alert(d.error);
         }
 
-        // DIAGNOSTIC (RÈGLES / IA)
         async function launchDiagnostic() {
             const ph = document.getElementById('diag-placeholder');
             const res = document.getElementById('diag-result');
@@ -519,7 +591,7 @@
             `;
         }
 
-        // PATIENT DASHBOARD
+        // PATIENT DASHBOARD (inchangé)
         async function loadPatientDashboard() {
             showSection('patient-home');
             const c = document.getElementById('patient-content');
